@@ -10,10 +10,8 @@ local terra next_comma_pos( buffer_ref : rawstring )
           and @(buffer_ref + pos) ~= new_line
           and @(buffer_ref + pos) ~= 0
           and pos < 1024 do
---        c.printf("c(%c) ", @(buffer_ref + pos))
         pos = pos + 1
     end
---    c.printf("r%d ", pos)
     return pos
 end
 
@@ -30,18 +28,14 @@ local function new_csv_sql(config)
 
     stencil.rule{
         {
-            target = "project",
+            target = "field_projection",
             K.field,
             K.scope
         },
         function(v, e)
             local end_pos = symbol(uint64, "end_pos")
             return quote
-                var [end_pos] = next_comma_pos([v.scope.buffer] + [v.scope.pos] + 1)
---                @([v.scope.buffer] + [v.scope.pos] + end_pos + 1) = [string.byte("_")]
---                c.printf("%s\n", [ v.field.name ])
-                c.printf("[%.*s]", [end_pos], [v.scope.buffer] + [v.scope.pos] + 1 )
-                [v.scope.pos] = [v.scope.pos] + [end_pos] + 1
+                c.printf("[%.*s]", [v.scope.length], [v.scope.buffer])
             end
         end
     }
@@ -54,37 +48,41 @@ local function new_csv_sql(config)
         },
         function(v, e)
             local var_pos = symbol(uint64, "pos")
+            local var_length = symbol(uint64, "length")
+            local var_field_buffer = symbol(rawstring, "field_buffer")
 
             local projections = {
                 quote
                     var [var_pos] = 0
+                    var [var_length] = 0
+                    var [var_field_buffer] = nil
                 end
             }
             for _, field in ipairs(v.request.scheme.fields) do
                 local scheme_field = m.match({ name = field.name }, v.request.query.select)
+                table.insert(projections, quote
+                    [var_length] = next_comma_pos([v.scope.buffer] + [var_pos] + 1)
+                    [var_field_buffer] = [v.scope.buffer] + [var_pos] + 1
+                end)
+
+
                 if scheme_field then
                     table.insert(projections, stencil.apply{
-                                target = "project",
+                                target = "field_projection",
                                 field = scheme_field,
                                 scope = {
-                                    buffer = v.scope.buffer,
-                                    pos = var_pos
+                                    buffer = var_field_buffer,
+                                    length = var_length
                                 }
                             })
-                else
-                    table.insert(projections, quote
-                            [var_pos] = [var_pos] + next_comma_pos([v.scope.buffer] + [var_pos] + 1)
-                            [var_pos] = [var_pos] + 1
---                            c.printf("p%d ", [var_pos])
-                            end)
                 end
+                table.insert(projections, quote
+                    [var_pos] = [var_pos] + [var_length] + 1
+                end)
             end
             table.insert(projections, quote c.printf("\n") end)
 
             return projections
---            return quote
---                c.printf("> %s", [v.scope.buffer])
---            end
         end
     }
 
@@ -99,7 +97,6 @@ local function new_csv_sql(config)
                     K.scope
         },
         function(v, e)
---            local new_line = string.byte("\n")
             return quote
                 var [v.scope.buffer] : rawstring = nil
                 var [v.scope.buffer_size] : uint64 = 0
@@ -121,8 +118,6 @@ local function new_csv_sql(config)
                                         fp)
                     if read_bytes == -1 then std.exit(2) end
 
---                    return buffer
---                    var line = readline(fp)
                     [ stencil.apply{
                         target = "record",
                         request = v.request,

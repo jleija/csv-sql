@@ -40,6 +40,7 @@ print("--------------------------------------------------------------")
 q:printpretty()
 print("--------------------------------------------------------------")
 
+--terralib.saveobj("test-csv-sql.bc", { main = q })
 --terralib.saveobj("test-csv-sql", { main = q })
 
 q(5, nil)
