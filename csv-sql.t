@@ -58,18 +58,18 @@ local function new_csv_sql(config)
                     var [var_field_buffer] = nil
                 end
             }
-            for _, field in ipairs(v.request.scheme.fields) do
-                local scheme_field = m.match({ name = field.name }, v.request.query.select)
+            for _, field in ipairs(v.request.schema.fields) do
+                local schema_field = m.match({ name = field.name }, v.request.query.select)
                 table.insert(projections, quote
                     [var_length] = next_comma_pos([v.scope.buffer] + [var_pos] + 1)
                     [var_field_buffer] = [v.scope.buffer] + [var_pos] + 1
                 end)
 
 
-                if scheme_field then
+                if schema_field then
                     table.insert(projections, stencil.apply{
                                 target = "field_projection",
-                                field = scheme_field,
+                                field = schema_field,
                                 scope = {
                                     buffer = var_field_buffer,
                                     length = var_length

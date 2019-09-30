@@ -6,7 +6,7 @@ local source = {
     file = "zillow.csv"
 }
 
-local scheme = {
+local schema = {
     type = "csv",
     fields = {
         { name = "Index", type = uint32 },
@@ -22,13 +22,13 @@ local scheme = {
 local query = {
     select = {
         { name = "Year" },
-        { name = "Price" }
+        { name = "Price" },
     }
 }
 
 local request = {
     source = source,
-    scheme = scheme,
+    schema = schema,
     query = query
 }
 
