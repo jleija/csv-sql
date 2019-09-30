@@ -98,8 +98,8 @@ local function new_csv_sql(config)
         },
         function(v, e)
             return quote
-                var [v.scope.buffer] : rawstring = nil
-                var [v.scope.buffer_size] : uint64 = 0
+                var [v.scope.buffer] = nil
+                var [v.scope.buffer_size] = 0
 
                 var fp = c.fopen([v.file], "r")
 
