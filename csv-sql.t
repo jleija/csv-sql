@@ -1,6 +1,11 @@
 local c = terralib.includec("stdio.h")
 local std = terralib.includec("stdlib.h")
 
+local terra_type = {
+    uint32 = uint32,
+    float = float
+}
+
 local comma = string.byte(",")
 local new_line = string.byte("\n")
 
@@ -28,14 +33,43 @@ local function new_csv_sql(config)
 
     stencil.rule{
         {
-            target = "field_projection",
+            target = "field_getter",
+            field = { type = "uint32" },
+            K.scope
+        },
+        function(v, e)
+            return quote
+                @([v.scope.buffer] + [v.scope.length]) = 0
+                var [v.scope.field_var] = std.atoi([v.scope.buffer])
+                c.printf("[n%u]", v.scope.field_var)
+            end
+        end
+    }
+
+    stencil.rule{
+        {
+            target = "field_getter",
+            field = { type = "float" },
+            K.scope
+        },
+        function(v, e)
+            return quote
+                @([v.scope.buffer] + [v.scope.length]) = 0
+                var [v.scope.field_var] = std.atof([v.scope.buffer])
+                c.printf("[f%f]", [v.scope.field_var])
+            end
+        end
+    }
+
+    stencil.rule{
+        {
+            target = "field_getter",
             K.field,
             K.scope
         },
         function(v, e)
-            local end_pos = symbol(uint64, "end_pos")
             return quote
-                c.printf("[%.*s]", [v.scope.length], [v.scope.buffer])
+                c.printf("?%.*s?", [v.scope.length], [v.scope.buffer])
             end
         end
     }
@@ -44,7 +78,7 @@ local function new_csv_sql(config)
         {
             target = "record",
             K.request,
-            K.scope
+            K.scope,
         },
         function(v, e)
             local var_pos = symbol(uint64, "pos")
@@ -58,6 +92,7 @@ local function new_csv_sql(config)
                     var [var_field_buffer] = nil
                 end
             }
+            local field_vars = {}
             for _, field in ipairs(v.request.schema.fields) do
                 local schema_field = m.match({ name = field.name }, v.request.query.select)
                 table.insert(projections, quote
@@ -67,12 +102,15 @@ local function new_csv_sql(config)
 
 
                 if schema_field then
+                    local var_field = symbol(terra_type[field.type], schema_field.name)
+                    field_vars[field.name] = var_field
                     table.insert(projections, stencil.apply{
-                                target = "field_projection",
-                                field = schema_field,
+                                target = "field_getter",
+                                field = field,
                                 scope = {
                                     buffer = var_field_buffer,
-                                    length = var_length
+                                    length = var_length,
+                                    field_var = var_field
                                 }
                             })
                 end
@@ -80,7 +118,12 @@ local function new_csv_sql(config)
                     [var_pos] = [var_pos] + [var_length] + 1
                 end)
             end
-            table.insert(projections, quote c.printf("\n") end)
+            local fields = {}
+            for _, field in ipairs(v.request.query.select) do
+                table.insert(fields, `[field_vars[field.name]])
+            end
+            table.insert(projections, quote [v.request.callback]([fields]) end)
+--            table.insert(projections, quote c.printf("\n") end)
 
             return projections
         end
@@ -89,12 +132,12 @@ local function new_csv_sql(config)
     stencil.rule{
         { 
             target = "loop", 
-                   request = V.request{
-                       source = { 
-                           K.file
-                       } 
-                   },
-                    K.scope
+            request = V.request{
+                   source = { 
+                       K.file
+                   } 
+            },
+            K.scope
         },
         function(v, e)
             return quote
@@ -121,7 +164,8 @@ local function new_csv_sql(config)
                     [ stencil.apply{
                         target = "record",
                         request = v.request,
-                        scope= v.scope } ]
+                        scope= v.scope
+                    } ]
                 end
                 c.fclose(fp)
             end
@@ -144,7 +188,8 @@ local function new_csv_sql(config)
                     scope = {
                         buffer = var_buffer,
                         buffer_size = var_buffer_size
-                    } } ]
+                    }
+                } ]
             end
         end
     }
