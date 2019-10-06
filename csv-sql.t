@@ -1,5 +1,6 @@
 local c = terralib.includec("stdio.h")
 local std = terralib.includec("stdlib.h")
+local mm = require'mm'
 
 local terra_type = {
     uint32 = uint32,
@@ -94,7 +95,7 @@ local function new_csv_sql(config)
             }
             local field_vars = {}
             for _, field in ipairs(v.request.schema.fields) do
-                local schema_field = m.match({ name = field.name }, v.request.query.select)
+                local schema_field = m.match({ name = field.name }, v.request.query.project)
                 table.insert(projections, quote
                     [var_length] = next_comma_pos([v.scope.buffer] + [var_pos] + 1)
                     [var_field_buffer] = [v.scope.buffer] + [var_pos] + 1
@@ -119,9 +120,22 @@ local function new_csv_sql(config)
                 end)
             end
             local fields = {}
-            for _, field in ipairs(v.request.query.select) do
-                table.insert(fields, `[field_vars[field.name]])
+            for _, field in ipairs(v.request.query.project) do
+                local field_var = field_vars[field.name]
+                -- TODO: get line number of current-token when the field
+                -- name is first captured so that the error shows the proper
+                -- line number
+                assert(field_var, "Unknown field " .. field.name)
+                table.insert(fields, `[field_var])
             end
+            mm(e.request.query.where)
+            -- TODO: CONTINUE HERE: where needs to be done in a 
+            -- template above this one. 
+            -- - local variables (fields) need to be passed here so that
+            --   we don't declare them again within this stencil
+            -- - find a way to avoid this insertion into projections. This
+            --   big stencil needs to be broken down into a bunch of smaller
+            --   stencils that are more homogeneous inside of them
             table.insert(projections, quote [v.request.callback]([fields]) end)
 --            table.insert(projections, quote c.printf("\n") end)
 

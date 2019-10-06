@@ -1,4 +1,4 @@
-local csv_sql = require("csv-sql")()
+local sql_traversal = require("sql-push-traversal")
 local mm = require'mm'
 
 local source = {
@@ -26,29 +26,26 @@ end
 
 import "sql-language"
 
-local query = select Price, Year from source where Year < 2000
+local query = select Price, Year from source where Year.x < 2000 and Price > 34.5 or just_x
 
 mm(query)
 
 local request = {
     parameters = {},    -- argvs command-line parameters
+    env = {},
+    scope = {},
     source = source,
     schema = schema,
     query = query,
     callback = callback
 }
 
-local q = csv_sql(request)
+local q = sql_traversal(request)
 
---mm(q)
---print(q)
-print("--------------------------------------------------------------")
-q:printpretty()
-print("--------------------------------------------------------------")
+--print("--------------------------------------------------------------")
+--q:printpretty()
+--print("--------------------------------------------------------------")
 
---terralib.saveobj("test-csv-sql.bc", { main = q })
-terralib.saveobj("test-csv-sql", { main = q })
-
-q(5, nil)
+--q(5, nil)
 
 
