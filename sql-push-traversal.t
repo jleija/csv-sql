@@ -44,7 +44,12 @@ local function ref(key, parent)     -- {{{
     return reference
 end
 
-local function collect_references(terra_expr, references)
+local type_value_examples = {
+    uint32 = 1,
+    float = 1.0
+}
+
+local function collect_references(terra_expr, references, schema)
     references = references or {}
 
     local env = {}
@@ -55,23 +60,25 @@ local function collect_references(terra_expr, references)
             if k == "getfenv" then return getfenv end
             local new_ref = ref(k)
             references[k] = new_ref
-            return new_ref
+            local field = m.match({name=k}, schema.fields)
+            return type_value_examples[field.type]
         end
     }
     setmetatable(env, mt)
 
     local terra_ast = terra_expr(env)
+--    terra_ast:printpretty()
 
     return references, terra_ast
 end
 
-local function project_references(query, refs)
+local function project_references(request, refs)
     refs = refs or {}
-    for _, field in ipairs(query.project) do
+    for _, field in ipairs(request.query.project) do
         if field.name then
             refs[field.name] = { ref = field.name }
         elseif field.expr then
-            collect_references(field.expr, refs)
+            collect_references(field.expr, refs, request.schema)
         else
             assert(false, "either name or expr")
         end
@@ -79,18 +86,18 @@ local function project_references(query, refs)
     return refs
 end
 
-local function where_references(query, refs)
+local function where_references(request, refs)
     refs = refs or {}
-    if query.where then
-        return collect_references(query.where, refs)
+    if request.query.where then
+        return collect_references(request.query.where, refs, request.schema)
     end
     return refs
 end
 
-local function all_query_references(query)
+local function all_query_references(request)
     local all_refs = {}
-    project_references(query, all_refs)
-    return where_references(query, all_refs)
+    project_references(request, all_refs)
+    return where_references(request, all_refs)
 end
 
 local function minimum_referenced_schema(refs, schema)
@@ -263,8 +270,8 @@ local function row_body(request, config)
             request = { query = { K.where } } 
         },
         function(v, e)
-            local all_refs = all_query_references(e.request.query)
-            local where_refs = where_references(e.request.query)
+            local all_refs = all_query_references(e.request)
+            local where_refs = where_references(e.request)
             local where_schema = minimum_referenced_schema(where_refs, request.schema)
             local locate_fields_til_where = locate_fields(all_refs, where_schema)
             return quote
@@ -293,8 +300,8 @@ local function row_body(request, config)
             request = { query = { K.project } } 
         },
         function(v, e)
-            local all_refs = all_query_references(e.request.query)
-            local project_refs = project_references(e.request.query)
+            local all_refs = all_query_references(e.request)
+            local project_refs = project_references(e.request)
             local project_schema = minimum_referenced_schema(project_refs, request.schema)
             local locate_fields_til_project = locate_fields(all_refs, project_schema)
             local field_getters, projection_vars = get_fields(project_refs, project_schema)
