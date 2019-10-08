@@ -26,7 +26,9 @@ end
 
 import "sql-language"
 
-local query = select Zip, SqFt from source where Beds <= 3
+--local query = select Zip, SqFt * 2 as Twice from source where Twice > 4442
+local query = select Zip, SqFt * 2 as Twice from source where Beds <= 3
+--local query = select Zip, SqFt from source where Beds <= 3
 
 --mm(query)
 

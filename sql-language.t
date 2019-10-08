@@ -1,12 +1,27 @@
+local mm = require'mm'
+
 local expression = function(self,lex)
   lex:expect("select") --first token should be "sum"
   local fields = {}
   if not lex:matches("from") then
+    local field
     repeat
-      local field_name = lex:expect(lex.name).value
-      local field = {
-          name = field_name
-      }
+      local next_token = lex:lookahead().type
+      if lex:matches(lex.name) and (next_token == "," 
+              or next_token == "from") then
+          local field_name = lex:expect(lex.name).value
+          field = {
+              name = field_name
+          }
+      else
+          local field_expr = lex:terraexpr()
+          lex:expect("as")
+          local as_field = lex:expect(lex.name).value
+          field = {
+              expr = field_expr,
+              as = as_field
+          }
+      end
       table.insert(fields, field)
     until not lex:nextif(",")
   end
@@ -82,7 +97,7 @@ end
 return {
   name = "sql",
   entrypoints = {"select"},
-  keywords = {"select", "from", "where", "call", "limit"},
+  keywords = {"select", "as", "from", "where", "call", "limit"},
   expression = expression
 }
 

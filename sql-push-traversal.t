@@ -251,17 +251,36 @@ local function row_body(request, config)
 
     local function get_fields(refs, schema)
         local field_getters = {}
-        local projection_vars = {}
         for _, field in ipairs(schema.fields) do
             if refs[field.name] then
                 table.insert(field_getters, stencil.apply{
                                                 target = "field_getter",
                                                 field = field
                                                 })
-                table.insert(projection_vars, scope[field.name])
             end
         end
-        return field_getters, projection_vars
+        return field_getters
+    end
+
+    local function get_projections(field_projections)
+        local projection_vars = {}
+        local projections = {}
+        for _, field in ipairs(field_projections) do
+            if field.name then
+                table.insert(projection_vars, scope[field.name])
+            else
+                assert(field.expr and field.as)
+                local field_expr = resolve_expr(field.expr, scope)
+                local var_as = symbol(field.as)
+                scope[field.as] = var_as
+                local as_quote = quote
+                    var [var_as] = [field_expr]
+                end
+                table.insert(projections, as_quote)
+                table.insert(projection_vars, var_as)
+            end
+        end
+        return projections, projection_vars
     end
 
     stencil.rule{
@@ -304,11 +323,13 @@ local function row_body(request, config)
             local project_refs = project_references(e.request)
             local project_schema = minimum_referenced_schema(project_refs, request.schema)
             local locate_fields_til_project = locate_fields(all_refs, project_schema)
-            local field_getters, projection_vars = get_fields(project_refs, project_schema)
+            local field_getters = get_fields(project_refs, project_schema)
+            local projections, projected_fields = get_projections(e.request.query.project)
             return quote
                 [ locate_fields_til_project ]
                 [ field_getters ]
-                [e.request.callback]([projection_vars])
+                [ projections ]
+                [e.request.callback]([projected_fields])
             end
         end
     }
