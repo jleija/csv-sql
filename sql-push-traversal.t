@@ -271,7 +271,13 @@ local function row_body(request, config)
             else
                 assert(field.expr and field.as)
                 local field_expr = resolve_expr(field.expr, scope)
-                local var_as = symbol(field.as)
+                local field_expr_type
+                if field_expr:istyped() then
+                    -- older versions of terra only support 
+                    -- typed symbols for variables
+                    field_expr_type = field_expr:gettype()
+                end
+                local var_as = symbol(field_expr_type, field.as)
                 scope[field.as] = var_as
                 local as_quote = quote
                     var [var_as] = [field_expr]

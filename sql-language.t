@@ -1,4 +1,4 @@
-local mm = require'mm'
+--local mm = require'mm'
 
 local expression = function(self,lex)
   lex:expect("select") --first token should be "sum"
